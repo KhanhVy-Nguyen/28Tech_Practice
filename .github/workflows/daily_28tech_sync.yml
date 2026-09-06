@@ -1,0 +1,40 @@
+name: Daily 28tech Sync
+
+on:
+  schedule:
+    # 00:00 đêm tại Việt Nam (UTC+7) tương ứng với 17:00 UTC hôm trước
+    - cron: '0 17 * * *'
+  workflow_dispatch: # Cho phép bấm nút chạy thử bằng tay bất cứ lúc nào
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Thiết lập Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Cài đặt thư viện
+        run: |
+          pip install requests beautifulsoup4
+
+      - name: Cấu hình danh tính Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Chạy script cào và đồng bộ
+        env:
+          SESSION_ID: ${{ secrets.SESSION_ID }}
+        run: |
+          python sync_daily.py
+
+      - name: Push kết quả lên nhánh main
+        run: |
+          git push origin main
