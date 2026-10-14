@@ -33,7 +33,7 @@ jobs:
         env:
           SESSION_ID: ${{ secrets.SESSION_ID }}
         run: |
-          python sync_daily.py
+          python crawl_and_commit.py
 
       - name: Push kết quả lên nhánh main
         run: |

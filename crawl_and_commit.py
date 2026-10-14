@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 # ================= CẤU HÌNH =================
 USERNAME = "Khanh_Vy_NN_2007"
 
-SESSION_ID = "0ihhkhjxgms2omraj30pqlmj6i1yyue9"
+SESSION_ID = os.environ.get("SESSION_ID", "")
 
 BASE_URL = "https://oj.28tech.com.vn"
 USER_SUBMISSIONS_URL = f"{BASE_URL}/submissions/user/{USERNAME}/"
@@ -145,8 +145,9 @@ def run():
             env["GIT_COMMITTER_DATE"] = iso_date
 
             commit_msg = f"Solve {prob_name}"
-            subprocess.run(["git", "commit", "-m", commit_msg], env=env, check=True)
-            total_commits += 1
+            commit_res = subprocess.run(["git", "commit", "-m", commit_msg], env=env, capture_output=True, text=True)
+            if commit_res.returncode == 0:
+                total_commits += 1
 
             time.sleep(0.5) # Tránh gửi request quá dồn dập
 
