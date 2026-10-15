@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 # ================= CẤU HÌNH =================
 USERNAME = "Khanh_Vy_NN_2007"
 
-# Nếu chạy trên máy tính cá nhân, bạn có thể dán tạm cookie sessionid vào chuỗi rỗng bên dưới:
+# Nếu chạy trên máy tính cá nhân, bạn hãy dán cookie sessionid thật vào giữa 2 dấu "" bên dưới:
 SESSION_ID = os.environ.get("SESSION_ID", "")
 
 BASE_URL = "https://oj.28tech.com.vn"
@@ -27,25 +27,6 @@ def clean_filename(name):
     name = re.sub(r'[\\/*?:"<>|]', "", name)
     return name.strip().replace(" ", "_")
 
-def parse_submission_time(raw_time_str):
-    """
-    Chuyển đổi các định dạng thời gian nộp bài sang chuẩn ISO (YYYY-MM-DDTHH:MM:SS) cho Git
-    """
-    clean_str = raw_time_str.strip()
-    date_formats = [
-        "%I:%M:%S %p, %d/%m/%Y",  # 8:37:36 am, 05/09/2026
-        "%H:%M:%S, %d/%m/%Y",     # 08:37:36, 05/09/2026
-        "%d/%m/%Y %H:%M:%S",     # 05/09/2026 08:37:36
-        "%d/%m/%Y %H:%M",        # 05/09/2026 08:37
-    ]
-    for fmt in date_formats:
-        try:
-            dt = datetime.strptime(clean_str, fmt)
-            return dt.strftime("%Y-%m-%dT%H:%M:%S")
-        except ValueError:
-            continue
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
 def get_submission_code(source_url):
     """Truy cập trang view source để lấy code"""
     try:
@@ -54,7 +35,7 @@ def get_submission_code(source_url):
             return None
         soup = BeautifulSoup(res.text, "html.parser")
 
-        # 1. Thử lấy từ nút Copy trên giao diện DMOJ
+        # 1. Thử lấy từ thuộc tính data-clipboard-text của nút Copy
         copy_btn = soup.find(attrs={"data-clipboard-text": True})
         if copy_btn:
             return copy_btn["data-clipboard-text"]
@@ -86,49 +67,42 @@ def run():
 
         soup = BeautifulSoup(res.text, "html.parser")
         
-        # Tìm bảng danh sách bài nộp
-        table = soup.find("table")
-        rows = []
-        if table:
-            tbody = table.find("tbody")
-            rows = tbody.find_all("tr") if tbody else table.find_all("tr")
-        else:
-            rows = soup.find_all("div", class_=re.compile(r"submission-row|submission"))
+        # 28tech hiển thị danh sách bài qua các khối thẻ div class="sub-info"
+        sub_info_elements = soup.find_all("div", class_="sub-info")
 
-        if not rows:
-            print("Không tìm thấy hàng bài nộp nào trên trang này. Dừng cào.")
+        if not sub_info_elements:
+            print("Không tìm thấy bài nộp nào trên trang này. Dừng cào.")
             break
 
         has_submission_in_page = False
 
-        for row in rows:
-            row_text = row.get_text()
+        for sub_info in sub_info_elements:
+            # Khối cha bọc ngoài cùng chứa cả trạng thái bài làm và link source
+            row_container = sub_info.parent
+            row_text = row_container.get_text()
 
             # 1. Kiểm tra trạng thái AC / Accepted
             if not re.search(r"\b(AC|Accepted)\b", row_text, re.I):
                 continue
 
             # 2. Tìm link view source hoặc submission ID
-            source_link_tag = row.find("a", href=re.compile(r"/(source|submission)/\d+"))
+            source_link_tag = row_container.find("a", href=lambda h: h and ("/source/" in h or "/submission/" in h))
             if not source_link_tag:
                 continue
 
             source_url = BASE_URL + source_link_tag["href"]
 
-            # 3. Lấy tên bài
-            prob_tag = row.find("a", href=re.compile(r"/problem/"))
+            # 3. Lấy tên bài từ link /problem/ bên trong sub-info
+            prob_tag = sub_info.find("a", href=lambda h: h and "/problem/" in h)
             prob_name = clean_filename(prob_tag.text) if prob_tag else "Unknown_Problem"
 
-            # 4. Lấy thời gian nộp bài linh hoạt
-            time_tag = row.find(string=re.compile(r"\d{1,2}:\d{2}", re.I))
-            if time_tag:
-                iso_date = parse_submission_time(time_tag)
+            # 4. Lấy thời gian ISO trực tiếp từ thuộc tính data-iso trên 28tech
+            time_elem = sub_info.find("span", attrs={"data-iso": True})
+            if time_elem and time_elem.get("data-iso"):
+                # Cắt chuỗi ISO dạng 2026-10-04T11:18:32.152568+00:00 lấy 19 ký tự chuẩn Git
+                iso_date = time_elem["data-iso"][:19]
             else:
-                time_elem = row.find("time")
-                if time_elem and time_elem.has_attr("datetime"):
-                    iso_date = time_elem["datetime"][:19]
-                else:
-                    iso_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                iso_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
             has_submission_in_page = True
 
@@ -161,7 +135,7 @@ def run():
             time.sleep(0.3)  # Giảm độ trễ nhẹ nhàng để tải mượt hơn
 
         if not has_submission_in_page:
-            print("Đã duyệt hết các bài nộp hợp lệ.")
+            print("Đã duyệt hết các bài nộp AC.")
             break
 
         page += 1
